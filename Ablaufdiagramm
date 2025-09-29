@@ -1,0 +1,13 @@
+[User Eingabe] 
+      │
+      ▼
+    [Main.java]
+      │ ruft Methoden auf
+      ▼
+[BreakfastManager] 
+      │ verwaltet Liste
+      ▼
+[BreakfastSpot Objekte]
+      │
+      ▼
+[cafes.csv] <- Speicherung / Laden
