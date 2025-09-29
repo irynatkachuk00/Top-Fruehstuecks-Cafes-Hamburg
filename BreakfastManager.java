@@ -1,114 +1,111 @@
+import java.io.*;
+import java.util.*;
 
+public class BreakfastManager {
+    private List<BreakfastSpot> spots = new ArrayList<>();
+    private int nextId = 1;
+    private final File storageFile;
 
+    public BreakfastManager(String filename) {
+        // CSV-Datei im Projektordner oder als absoluter Pfad
+        this.storageFile = new File(filename);
 
-	import java.io.*;
-	import java.util.*;
-	import java.util.stream.Collectors;
+        // Ordner erstellen, falls nötig
+        try {
+            if (!storageFile.exists()) {
+                if (storageFile.getParentFile() != null) {
+                    storageFile.getParentFile().mkdirs();
+                }
+                storageFile.createNewFile();
+            }
+        } catch (IOException e) {
+            System.err.println("Fehler beim Erstellen der Datei: " + e.getMessage());
+        }
 
-	/**
-	 * Verwaltet die Liste der Frühstücks-Cafés,
-	 * inklusive Laden/Speichern aus einer CSV-Datei.
-	 */
-	public class BreakfastManager {
-	    private List<BreakfastSpot> spots = new ArrayList<>();
-	    private int nextId = 1;
-	    private final File storageFile;
+        ladeVonDatei();
+        seedIfEmpty(); // Startdaten, falls Datei leer
+    }
 
-	    public BreakfastManager(String filename) {
-	        this.storageFile = new File(filename);
-	        loadFromFile();
-	    }
+    public void addSpot(String name, String address, String neighborhood, double rating) {
+        spots.add(new BreakfastSpot(nextId++, name, address, neighborhood, rating));
+        speichereInDatei();
+    }
 
-	    public void addSpot(String name, String address,
-	                        String neighborhood, double rating, String notes) {
-	        BreakfastSpot s = new BreakfastSpot(nextId++, name, address, neighborhood,
-	                                            rating, notes == null ? "" : notes);
-	        spots.add(s);
-	        saveToFile();
-	    }
+    public List<BreakfastSpot> listAll() {
+        return new ArrayList<>(spots);
+    }
 
-	    public List<BreakfastSpot> listAll() {
-	        return new ArrayList<>(spots);
-	    }
+    public List<BreakfastSpot> filterByNeighborhood(String neighborhood) {
+        String target = neighborhood.toLowerCase();
+        List<BreakfastSpot> result = new ArrayList<>();
+        for (BreakfastSpot s : spots) {
+            if (s.getNeighborhood().toLowerCase().contains(target)) {
+                result.add(s);
+            }
+        }
+        return result;
+    }
 
-	    public List<BreakfastSpot> getTopN(int n) {
-	        return spots.stream()
-	                .sorted(Comparator.comparingDouble(BreakfastSpot::getRating)
-	                        .reversed()
-	                        .thenComparing(BreakfastSpot::getName))
-	                .limit(n)
-	                .collect(Collectors.toList());
-	    }
-	public List<BreakfastSpot> filterByNeighborhood(String neighborhood) {
-	        String target = neighborhood.trim().toLowerCase();
-	        return spots.stream()
-	                .filter(s -> s.getNeighborhood().toLowerCase().contains(target))
-	                .collect(Collectors.toList());
-	    }
+    public boolean removeById(int id) {
+        Iterator<BreakfastSpot> it = spots.iterator();
+        while (it.hasNext()) {
+            BreakfastSpot s = it.next();
+            if (s.getId() == id) {
+                it.remove();
+                speichereInDatei();
+                return true;
+            }
+        }
+        return false;
+    }
 
-	    public boolean removeById(int id) {
-	        boolean removed = spots.removeIf(s -> s.getId() == id);
-	        if (removed) saveToFile();
-	        return removed;
-	    }
+    private void speichereInDatei() {
+        try (PrintWriter pw = new PrintWriter(new FileWriter(storageFile))) {
+            for (BreakfastSpot s : spots) {
+                pw.println(s.getId() + ";" + s.getName() + ";" + s.getAddress() + ";" +
+                           s.getNeighborhood() + ";" + s.getRating());
+            }
+        } catch (IOException e) {
+            System.err.println("Fehler beim Speichern: " + e.getMessage());
+        }
+    }
 
-	    private void saveToFile() {
-	        try (PrintWriter pw = new PrintWriter(new FileWriter(storageFile))) {
-	            for (BreakfastSpot s : spots) {
-	                pw.println(s.toCsvLine());
-	            }
-	        } catch (IOException e) {
-	            System.err.println("Fehler beim Speichern: " + e.getMessage());
-	        }
-	    }
+    private void ladeVonDatei() {
+        if (!storageFile.exists()) return;
+        try (BufferedReader br = new BufferedReader(new FileReader(storageFile))) {
+            String line;
+            int maxId = 0;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(";");
+                if (parts.length == 5) {
+                    try {
+                        int id = Integer.parseInt(parts[0]);
+                        String name = parts[1];
+                        String addr = parts[2];
+                        String nb = parts[3];
+                        double rating = Double.parseDouble(parts[4]);
+                        spots.add(new BreakfastSpot(id, name, addr, nb, rating));
+                        if (id > maxId) maxId = id;
+                    } catch (NumberFormatException ex) {
+                        System.err.println("Fehler beim Lesen der Zeile: " + line);
+                    }
+                }
+            }
+            nextId = maxId + 1;
+        } catch (IOException e) {
+            System.err.println("Fehler beim Laden: " + e.getMessage());
+        }
+    }
 
-	    private void loadFromFile() {
-	        if (!storageFile.exists()) return;
-	        try (BufferedReader br = new BufferedReader(new FileReader(storageFile))) {
-	            String line;
-	            int maxId = 0;
-	            while ((line = br.readLine()) != null) {
-	                BreakfastSpot s = BreakfastSpot.fromCsvLine(line);
-	                if (s != null) {
-	                    spots.add(s);
-	                    if (s.getId() > maxId) maxId = s.getId();
-	                }
-	            }
-	            nextId = maxId + 1;
-	        } catch (IOException e) {
-	            System.err.println("Fehler beim Laden: " + e.getMessage());
-	        }
-	    }
+    private void seedIfEmpty() {
+        if (!spots.isEmpty()) return;
+        addSpot("Nord Coast Coffee Roastery", "Deichstraße 9", "Altstadt", 4.8);
+        addSpot("Mamalicious", "Max-Bräuer-Allee 277", "Sternschanze", 4.7);
+        addSpot("Mit Herz und Zucker", "Lübecker Str. 29", "Hohenfelde", 4.7);
+    }
 
-	    /** Startdatensätze für Hamburg (Top 5) */
-	    public void seedIfEmpty() {
-	        if (!spots.isEmpty()) return;
-	        addSpot("Nord Coast Coffee Roastery",
-	                "Deichstraße 9",
-	                "Altstadt",
-	                4.8,
-	                "Eigene Kaffeeröstung, Bowls, Pancakes, vegane Optionen");
-	        addSpot("Mamalicious",
-	                "Max-Bräuer-Allee 277",
-	                "Sternschanze",
-	                4.7,
-	                "Amerikanischer Stil: Pancakes, Waffeln, große Portionen");
-	        addSpot("Mit Herz und Zucker",
-	                "Lübecker Str. 29",
-	                "Hohenfelde",
-	                4.7,
-	                "Hausgemachtes Gebäck, regionale Produkte, gemütlich");
-	        addSpot("Café Koppel",
-	                "Koppel 66 (Lange Reihe 75)",
-	                "St. Georg",
-	                4.6,
-	                "Grüner Innenhof, viele vegane/vegetarische Optionen");
-	        addSpot("Patisserie Madeleine",
-	                "Keplerstraße 36",
-	                "Ottensen",
-	                4.6,
-	                "Französische Croissants und Tartes, Pariser Flair");
-	    }
-	
-
+    // Optional: für Debugging, zeigt, wo die Datei erstellt wird
+    public void printFilePath() {
+        System.out.println("CSV-Datei: " + storageFile.getAbsolutePath());
+    }
 }
